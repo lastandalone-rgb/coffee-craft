@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+/frontend/node_modules/
+/backend/node_modules/
+
+# Next.js build output
+/frontend/.next/
+/frontend/out/
+
+# Backend build output
+/backend/dist/
+
+# SQLite databases
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+/backend/data/
+
+# OS files
+.DS_Store
+.DS_Store?
+Thumbs.db
+
+# IDEs and editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

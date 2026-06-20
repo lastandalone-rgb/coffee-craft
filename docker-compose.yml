@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  # Nginx Reverse Proxy for handling local domain coffee.nas
+  nginx-proxy:
+    image: nginxproxy/nginx-proxy
+    container_name: coffee-nginx-proxy
+    ports:
+      - "80:80"
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+    restart: always
+    networks:
+      - coffee-net
+
+  # SQLite + Express API Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: coffee-backend
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    volumes:
+      - sqlite-data:/usr/src/app/data
+    restart: always
+    networks:
+      - coffee-net
+    expose:
+      - "3001"
+
+  # Next.js Coffee Timer & Dashboard Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: coffee-frontend
+    environment:
+      - NODE_ENV=production
+      - BACKEND_URL=http://backend:3001
+      - VIRTUAL_HOST=coffee.nas
+      - VIRTUAL_PORT=3000
+    ports:
+      - "8080:3000" # Backup port for accessing directly via http://<NAS_IP>:8080
+    restart: always
+    depends_on:
+      - backend
+    networks:
+      - coffee-net
+
+volumes:
+  sqlite-data:
+
+networks:
+  coffee-net:
+    driver: bridge
