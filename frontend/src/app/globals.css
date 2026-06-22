@@ -25,6 +25,7 @@
   --color-coffee-border: var(--border-coffee);
   --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   --animate-brew-wave: brewWave 2s ease-in-out infinite;
+  --animate-fade-in: fade-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes brewWave {
@@ -36,6 +37,11 @@
     transform: translateY(-4px) scale(1.02);
     opacity: 1;
   }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 body {
@@ -174,3 +180,21 @@ body {
               0 0 15px rgba(198, 134, 66, 0.08) !important;
   border-color: rgba(198, 134, 66, 0.25) !important;
 }
+
+@keyframes alert-vibrate {
+  0%, 100% { transform: translate(0, 0); }
+  10% { transform: translate(-1.5px, -2px); }
+  20% { transform: translate(2px, 1.5px); }
+  30% { transform: translate(-2px, 1.5px); }
+  40% { transform: translate(1.5px, -1.5px); }
+  50% { transform: translate(-1.5px, 2px); }
+  60% { transform: translate(2px, -1.5px); }
+  70% { transform: translate(-1.5px, -1.5px); }
+  80% { transform: translate(1.5px, 2px); }
+  90% { transform: translate(-2px, -1.5px); }
+}
+
+.animate-vibrate {
+  animation: alert-vibrate 0.05s infinite;
+}
+

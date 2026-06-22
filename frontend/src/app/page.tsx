@@ -113,6 +113,89 @@ export default function CoffeeTimerDashboard() {
 
   const isMobileRunning = mobileActiveTab === "timer" && (brewType === "espresso" ? espressoSubStage === "timing" : isTimerActive);
 
+  // Preserve scroll position when entering/exiting mobile focus mode
+  const scrollPositionRef = React.useRef<number>(0);
+  const [isVisualFocus, setIsVisualFocus] = useState(false);
+  const [transitionState, setTransitionState] = useState<"idle" | "fading-in-enter" | "fading-in-exit" | "fading-out">("idle");
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (!isVisualFocus) {
+        scrollPositionRef.current = window.scrollY;
+      }
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, [isVisualFocus]);
+
+  // Handle entering/exiting transitions driven by timer state
+  useEffect(() => {
+    if (isMobileRunning) {
+      if (!isVisualFocus && transitionState === "idle") {
+        setTransitionState("fading-in-enter");
+      }
+    } else {
+      if (isVisualFocus && transitionState === "idle") {
+        setTransitionState("fading-in-exit");
+      }
+    }
+  }, [isMobileRunning, isVisualFocus, transitionState]);
+
+  // Robust timer-driven transition state machine to avoid fragile onTransitionEnd events on iOS Safari
+  useEffect(() => {
+    if (transitionState === "fading-in-enter") {
+      const timer = setTimeout(() => {
+        setIsVisualFocus(true);
+        setTransitionState("fading-out");
+      }, 180); // Transition duration is 150ms + safety buffer
+      return () => clearTimeout(timer);
+    }
+    
+    if (transitionState === "fading-in-exit") {
+      const timer = setTimeout(() => {
+        setIsVisualFocus(false);
+      }, 180); // Transition duration is 150ms + safety buffer
+      return () => clearTimeout(timer);
+    }
+
+    if (transitionState === "fading-out") {
+      const timer = setTimeout(() => {
+        setTransitionState("idle");
+      }, 180); // Transition duration is 150ms + safety buffer
+      return () => clearTimeout(timer);
+    }
+  }, [transitionState]);
+
+  // Restores scroll position in a DOM-updated layout cycle before fading out the mask
+  useEffect(() => {
+    if (!isVisualFocus && transitionState === "fading-in-exit") {
+      const targetScrollY = scrollPositionRef.current;
+      let attempts = 0;
+      
+      const performScroll = () => {
+        window.scrollTo({
+          top: targetScrollY,
+          behavior: "instant"
+        });
+        
+        const currentScrollY = window.scrollY;
+        // Verify if we reached the target or hit max attempts
+        if (Math.abs(currentScrollY - targetScrollY) <= 2 || attempts >= 20) {
+          setTimeout(() => {
+            setTransitionState("fading-out");
+          }, 40);
+        } else {
+          attempts++;
+          requestAnimationFrame(performScroll);
+        }
+      };
+      
+      requestAnimationFrame(performScroll);
+    }
+  }, [isVisualFocus, transitionState]);
+
   // New Bean Form States
   const [newBeanName, setNewBeanName] = useState("");
   const [newBeanRoaster, setNewBeanRoaster] = useState("");
@@ -124,6 +207,45 @@ export default function CoffeeTimerDashboard() {
 
   // Mark mounted on client to prevent SSR hydration mismatch and initialize remote log sender
   useEffect(() => {
+    // Restore parameter states on client mount
+    if (typeof window !== "undefined") {
+      const savedBrewType = localStorage.getItem("coffee_timer_brew_type") as "pour_over" | "espresso";
+      const activeType = savedBrewType || "espresso";
+      if (savedBrewType) {
+        setBrewType(savedBrewType);
+      }
+      
+      const savedGrind = localStorage.getItem(`coffee_timer_${activeType}_grind_size`);
+      if (savedGrind) setGrindSize(savedGrind);
+      
+      const savedTemp = localStorage.getItem(`coffee_timer_${activeType}_water_temp`);
+      if (savedTemp) setWaterTemp(savedTemp);
+      
+      const savedCoffee = localStorage.getItem(`coffee_timer_${activeType}_coffee_weight`);
+      if (savedCoffee) setCoffeeWeight(savedCoffee);
+      
+      const savedWater = localStorage.getItem("coffee_timer_pour_over_water_weight");
+      if (savedWater) setWaterWeight(savedWater);
+      
+      const savedLiquid = localStorage.getItem("coffee_timer_espresso_liquid_weight");
+      if (savedLiquid) setLiquidWeight(savedLiquid);
+      
+      const savedPressure = localStorage.getItem("coffee_timer_espresso_pressure");
+      if (savedPressure) setPressure(savedPressure);
+      
+      const savedPreinfusion = localStorage.getItem("coffee_timer_espresso_preinfusion_time");
+      if (savedPreinfusion) setPreinfusionTime(savedPreinfusion);
+
+      const savedBeanId = localStorage.getItem("coffee_timer_selected_bean_id");
+      if (savedBeanId) setSelectedBeanId(savedBeanId);
+
+      const savedBeanName = localStorage.getItem("coffee_timer_bean_name");
+      if (savedBeanName) setBeanName(savedBeanName);
+
+      const savedEspressoLayout = localStorage.getItem("coffee_timer_espresso_layout") as any;
+      if (savedEspressoLayout) setEspressoLayout(savedEspressoLayout);
+    }
+
     setIsMounted(true);
 
     // Capture console errors and send to backend for debugging
@@ -164,15 +286,48 @@ export default function CoffeeTimerDashboard() {
     };
   }, []);
 
-  // Default parameters switch on mode toggle
+  // Save parameters to localStorage when they change
   useEffect(() => {
     if (!isMounted) return;
-    if (brewType === "espresso") {
-      setCoffeeWeight("18");
-      setWaterTemp("92");
-    } else {
-      setCoffeeWeight("15");
-      setWaterTemp("92");
+    if (typeof window !== "undefined") {
+      localStorage.setItem("coffee_timer_brew_type", brewType);
+      localStorage.setItem(`coffee_timer_${brewType}_grind_size`, grindSize);
+      localStorage.setItem(`coffee_timer_${brewType}_water_temp`, waterTemp);
+      localStorage.setItem(`coffee_timer_${brewType}_coffee_weight`, coffeeWeight);
+      localStorage.setItem("coffee_timer_selected_bean_id", selectedBeanId);
+      localStorage.setItem("coffee_timer_bean_name", beanName);
+      localStorage.setItem("coffee_timer_espresso_layout", espressoLayout);
+      if (brewType === "espresso") {
+        localStorage.setItem("coffee_timer_espresso_liquid_weight", liquidWeight);
+        localStorage.setItem("coffee_timer_espresso_pressure", pressure);
+        localStorage.setItem("coffee_timer_espresso_preinfusion_time", preinfusionTime);
+      } else {
+        localStorage.setItem("coffee_timer_pour_over_water_weight", waterWeight);
+      }
+    }
+  }, [brewType, grindSize, waterTemp, coffeeWeight, selectedBeanId, beanName, espressoLayout, liquidWeight, pressure, preinfusionTime, waterWeight, isMounted]);
+
+  // Synchronize beanName if activeBeans list loads/changes
+  useEffect(() => {
+    if (selectedBeanId && activeBeans.length > 0) {
+      const selected = activeBeans.find(b => b.id === selectedBeanId);
+      if (selected) {
+        setBeanName(selected.name);
+      }
+    }
+  }, [selectedBeanId, activeBeans]);
+
+  // Parameters restore on mode toggle
+  useEffect(() => {
+    if (!isMounted) return;
+    if (typeof window !== "undefined") {
+      const savedGrind = localStorage.getItem(`coffee_timer_${brewType}_grind_size`);
+      const savedTemp = localStorage.getItem(`coffee_timer_${brewType}_water_temp`);
+      const savedCoffee = localStorage.getItem(`coffee_timer_${brewType}_coffee_weight`);
+      
+      setGrindSize(savedGrind || (brewType === "espresso" ? "3.5" : "24"));
+      setWaterTemp(savedTemp || "92");
+      setCoffeeWeight(savedCoffee || (brewType === "espresso" ? "18" : "15"));
     }
     handleReset();
     fetchData(brewType);
@@ -632,11 +787,7 @@ export default function CoffeeTimerDashboard() {
   return (
     <div 
       id="page-wrapper" 
-      className={`flex-1 flex flex-col max-w-7xl w-full mx-auto transition-all duration-500 ${
-        isMobileRunning 
-          ? "p-0 gap-0 pb-0 lg:p-8 lg:gap-6 lg:pb-8" 
-          : "p-4 md:p-8 gap-6 pb-24 lg:pb-8"
-      }`}
+      className="flex-1 flex flex-col max-w-7xl w-full mx-auto p-4 md:p-8 gap-6 pb-24 lg:pb-8"
     >
       {/* Toast Notification */}
       {toast && (
@@ -656,10 +807,8 @@ export default function CoffeeTimerDashboard() {
       {/* Header */}
       <header 
         id="main-header" 
-        className={`flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-white/5 gap-4 transition-all duration-500 ${
-          isMobileRunning 
-            ? "opacity-0 pointer-events-none h-0 mb-0 py-0 border-b-0 overflow-hidden" 
-            : "pb-5 mb-0"
+        className={`flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-white/5 gap-4 pb-5 mb-0 ${
+          isVisualFocus ? "hidden lg:flex" : "flex animate-fade-in"
         }`}
       >
         <div id="header-logo-section" className="flex items-center gap-3.5">
@@ -767,8 +916,9 @@ export default function CoffeeTimerDashboard() {
           </div>
 
           {/* Special Custom Dial & Sliders (Mobile View) */}
-          <div id="mobile-timer-container" className={mobileActiveTab === "timer" ? "block lg:hidden w-full animate-fadeIn" : "hidden"}>
+          <div id="mobile-timer-container" className={mobileActiveTab === "timer" ? "block lg:hidden w-full animate-fade-in" : "hidden"}>
             <MobileSpecialDashboard
+              isVisualFocus={isVisualFocus}
               brewType={brewType}
               grindSize={grindSize}
               setGrindSize={setGrindSize}
@@ -808,7 +958,7 @@ export default function CoffeeTimerDashboard() {
             id="mobile-parameters-container" 
             className={
               mobileActiveTab === "timer" 
-                ? (isMobileRunning ? "hidden lg:block w-full" : "flex flex-1 flex-col w-full animate-fadeIn") 
+                ? (isVisualFocus ? "hidden lg:block w-full" : "flex flex-1 flex-col w-full animate-fade-in") 
                 : "hidden lg:block w-full"
             }
           >
@@ -845,7 +995,7 @@ export default function CoffeeTimerDashboard() {
           </div>
 
           {/* Coffee Bean Inventory Card */}
-          <div id="mobile-inventory-container" className={mobileActiveTab === "inventory" ? "flex flex-1 flex-col w-full animate-fadeIn" : "hidden lg:block w-full"}>
+          <div id="mobile-inventory-container" className={mobileActiveTab === "inventory" ? "flex flex-1 flex-col w-full animate-fade-in" : "hidden lg:block w-full"}>
             <CoffeeBeanInventory
               activeBeans={activeBeans}
               setIsAddBeanModalOpen={setIsAddBeanModalOpen}
@@ -858,7 +1008,7 @@ export default function CoffeeTimerDashboard() {
         <main id="right-stats-column" className={`lg:col-span-7 flex flex-col gap-6 ${mobileActiveTab === "stats" || mobileActiveTab === "history" ? "flex flex-1" : "hidden lg:flex"}`}>
           
           {/* Quick Stats Grid & Charts */}
-          <div id="stats-dashboard-container" className={mobileActiveTab === "stats" ? "flex flex-1 flex-col gap-6 w-full animate-fadeIn" : "hidden lg:flex lg:flex-col lg:gap-6 lg:w-full"}>
+          <div id="stats-dashboard-container" className={mobileActiveTab === "stats" ? "flex flex-1 flex-col gap-6 w-full animate-fade-in" : "hidden lg:flex lg:flex-col lg:gap-6 lg:w-full"}>
             <div id="stats-overview-bento" className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               
               <div id="stat-card-total-brews" className="glass-panel rounded-2xl p-4 flex flex-col justify-between border border-white/5 relative overflow-hidden">
@@ -945,7 +1095,7 @@ export default function CoffeeTimerDashboard() {
           </div>
 
           {/* History Log Container */}
-          <div id="mobile-history-container" className={mobileActiveTab === "history" ? "flex flex-1 flex-col w-full animate-fadeIn" : "hidden lg:block w-full"}>
+          <div id="mobile-history-container" className={mobileActiveTab === "history" ? "flex flex-1 flex-col w-full animate-fade-in" : "hidden lg:block w-full"}>
             <BrewHistory 
               history={history} 
               brewType={brewType} 
@@ -958,11 +1108,7 @@ export default function CoffeeTimerDashboard() {
       </div>
 
       {/* Mobile Bottom Navbar (Visible only on mobile) */}
-      <div 
-        className={`transition-all duration-500 ${
-          isMobileRunning ? "opacity-0 pointer-events-none h-0 overflow-hidden" : ""
-        }`}
-      >
+      <div className={isVisualFocus ? "hidden" : "animate-fade-in"}>
         <MobileBottomNavbar
           mobileActiveTab={mobileActiveTab}
           setMobileActiveTab={setMobileActiveTab}
@@ -1080,6 +1226,14 @@ export default function CoffeeTimerDashboard() {
           </div>
         </div>
       )}
+      {/* Global Transition Mask Overlay */}
+      <div 
+        className={`fixed inset-0 bg-[#0A0706] z-[9999] pointer-events-none transition-opacity duration-150 ${
+          transitionState === "fading-in-enter" || transitionState === "fading-in-exit"
+            ? "opacity-100"
+            : "opacity-0"
+        }`}
+      />
     </div>
   );
 }

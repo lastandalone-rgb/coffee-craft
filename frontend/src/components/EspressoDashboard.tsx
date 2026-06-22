@@ -338,7 +338,7 @@ export const EspressoDashboard: React.FC<EspressoDashboardProps> = ({
 
         {/* Reset & Save for Espresso Done / Idle state */}
         {espressoSubStage === "done" && (
-          <div id="espresso-done-controls" className="flex gap-3 w-full mt-1.5 animate-fadeIn">
+          <div id="espresso-done-controls" className="flex gap-3 w-full mt-1.5 animate-fade-in">
             <button
               id="btn-espresso-reset-desktop"
               type="button"
