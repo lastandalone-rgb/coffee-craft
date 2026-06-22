@@ -6,6 +6,9 @@ COPY package*.json ./
 RUN npm install
 
 COPY . .
+
+ENV BACKEND_URL=http://backend:3001
+
 RUN npm run build
 
 EXPOSE 3000
