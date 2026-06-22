@@ -1,18 +1,6 @@
 version: '3.8'
 
 services:
-  # Nginx Reverse Proxy for handling local domain coffee.nas
-  nginx-proxy:
-    image: nginxproxy/nginx-proxy
-    container_name: coffee-nginx-proxy
-    ports:
-      - "80:80"
-    volumes:
-      - /var/run/docker.sock:/tmp/docker.sock:ro
-    restart: always
-    networks:
-      - coffee-net
-
   # SQLite + Express API Backend
   backend:
     build:
@@ -42,7 +30,7 @@ services:
       - VIRTUAL_HOST=coffee.nas
       - VIRTUAL_PORT=3000
     ports:
-      - "8080:3000" # Backup port for accessing directly via http://<NAS_IP>:8080
+      - "3010:3000" # Port for accessing directly via http://<NAS_IP>:3010
     restart: always
     depends_on:
       - backend
