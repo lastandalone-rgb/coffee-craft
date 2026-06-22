@@ -1,26 +1,27 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
 @import "tailwindcss";
 
 :root {
-  --background: #0f0b09; /* Deep coffee bean dark */
-  --foreground: #f4eae0; /* Warm milk cream */
-  --card-bg: #1a120e;    /* Solid dark brown for mobile performance */
-  --accent-espresso: #4b3621;
+  --background: #0A0706; /* Solid luxury obsidian */
+  --foreground: #F5EFEB; /* Creamy warm latte froth white */
+  --card-bg: #130E0C;    /* Rich espresso shot brown */
+  --accent-espresso: #1C1512;
   --accent-caramel: #c68642;
   --accent-latte: #e0b034;
-  --accent-cream: #f4eae0;
-  --border-coffee: rgba(198, 134, 66, 0.15);
+  --accent-cream: #F5EFEB;
+  --border-coffee: rgba(255, 255, 255, 0.05); /* Ultra-thin borders */
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card-bg: var(--card-bg);
-  --color-coffee-dark: #0f0b09;
-  --color-coffee-bean: #1a120e;
+  --color-coffee-dark: #0A0706;
+  --color-coffee-bean: #130E0C;
   --color-espresso: #4b3621;
   --color-caramel: #c68642;
   --color-latte: #e0b034;
-  --color-cream: #f4eae0;
+  --color-cream: #F5EFEB;
   --color-coffee-border: var(--border-coffee);
   --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   --animate-brew-wave: brewWave 2s ease-in-out infinite;
@@ -32,53 +33,144 @@
     opacity: 0.8;
   }
   50% {
-    transform: translateY(-8px) scale(1.03);
+    transform: translateY(-4px) scale(1.02);
     opacity: 1;
   }
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
+  background-image: 
+    radial-gradient(circle at 5% 10%, rgba(198, 134, 66, 0.06), transparent 40%),
+    radial-gradient(circle at 95% 90%, rgba(224, 176, 52, 0.04), transparent 50%);
+  background-attachment: fixed;
   color: var(--foreground);
   font-family: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   overflow-x: hidden;
+  letter-spacing: -0.01em;
 }
 
 /* Premium Solid Panel with subtle border for high mobile performance */
 .glass-panel {
-  background: #160f0c;
-  border: 1px solid var(--border-coffee);
-  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.3);
+  background: rgba(19, 14, 12, 0.75) !important;
+  backdrop-filter: blur(20px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(140%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.04) !important;
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.6) !important;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
-/* Apply backdrop-filter only on larger screens to prevent Safari render freeze */
-@media (min-width: 1024px) {
-  .glass-panel {
-    background: rgba(26, 18, 14, 0.65);
-    backdrop-filter: blur(12px) saturate(120%);
-  }
+.glass-panel:hover {
+  border-color: rgba(198, 134, 66, 0.15) !important;
+  box-shadow: 0 16px 48px 0 rgba(0, 0, 0, 0.7), 0 0 20px 0 rgba(198, 134, 66, 0.03) !important;
 }
 
 .coffee-glow {
-  box-shadow: 0 0 25px rgba(198, 134, 66, 0.2);
+  box-shadow: 0 0 25px rgba(198, 134, 66, 0.1) !important;
 }
 
 .coffee-glow-active {
-  box-shadow: 0 0 40px rgba(224, 176, 52, 0.4);
+  box-shadow: 0 0 35px rgba(224, 176, 52, 0.25) !important;
 }
 
-/* Custom scrollbar */
+/* Custom premium transitions and buttons */
+.btn-premium {
+  position: relative;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.btn-premium::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -50%;
+  width: 200%;
+  height: 100%;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(255, 255, 255, 0.05),
+    transparent
+  );
+  transform: skewX(-20deg);
+  transition: 0.75s;
+}
+
+.btn-premium:hover::after {
+  left: 120%;
+}
+
+/* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0f0b09;
+  background: #0A0706;
 }
 ::-webkit-scrollbar-thumb {
-  background: #4b3621;
+  background: #1C1512;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #c68642;
+}
+
+/* Dial Ripple and Glow Animations */
+@keyframes ripple-idle {
+  0% {
+    transform: scale(1.0);
+    opacity: 0.75;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+@keyframes ripple-active {
+  0% {
+    transform: scale(1.0);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(1.75);
+    opacity: 0;
+  }
+}
+
+.dial-ripple-idle {
+  animation: ripple-idle 3s cubic-bezier(0.1, 0.8, 0.3, 1) infinite;
+  border: 2px solid rgba(198, 134, 66, 0.45);
+  box-shadow: 0 0 22px rgba(198, 134, 66, 0.18);
+}
+
+.dial-ripple-active-1 {
+  animation: ripple-active 1.8s cubic-bezier(0.1, 0.8, 0.3, 1) infinite;
+  border: 2.5px solid rgba(224, 176, 52, 0.6);
+  box-shadow: 0 0 35px rgba(224, 176, 52, 0.25);
+}
+
+.dial-ripple-active-2 {
+  animation: ripple-active 1.8s cubic-bezier(0.1, 0.8, 0.3, 1) infinite;
+  animation-delay: 0.9s;
+  border: 2.5px solid rgba(198, 134, 66, 0.4);
+  box-shadow: 0 0 25px rgba(198, 134, 66, 0.18);
+}
+
+.dial-glow-active {
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.9), 
+              0 0 35px rgba(224, 176, 52, 0.35),
+              0 0 65px rgba(198, 134, 66, 0.18) !important;
+  border-color: rgba(224, 176, 52, 0.5) !important;
+}
+
+.dial-glow-idle {
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.8), 
+              0 0 15px rgba(198, 134, 66, 0.08) !important;
+  border-color: rgba(198, 134, 66, 0.25) !important;
 }

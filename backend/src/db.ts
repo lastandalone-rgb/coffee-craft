@@ -37,6 +37,33 @@ export const initDB = async () => {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_coffee_brews_created_at ON coffee_brews(created_at);
+
+    -- New Coffee Beans Inventory Table
+    CREATE TABLE IF NOT EXISTS coffee_beans (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      roaster TEXT,
+      roast_date DATE NOT NULL,
+      roast_level TEXT CHECK(roast_level IN ('light', 'medium', 'dark')),
+      origin TEXT,
+      process TEXT,
+      initial_weight REAL,
+      current_weight REAL,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- New Telemetry Points Table for real-time profiling curves
+    CREATE TABLE IF NOT EXISTS brew_telemetry_points (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      brew_id TEXT NOT NULL,
+      time_offset REAL NOT NULL,
+      yield REAL,
+      flow_rate REAL,
+      pressure REAL,
+      FOREIGN KEY(brew_id) REFERENCES coffee_brews(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_telemetry_brew_id ON brew_telemetry_points(brew_id);
   `);
 
   // Run migrations to add espresso specific fields if they do not exist
@@ -64,6 +91,13 @@ export const initDB = async () => {
   try {
     await db.exec(`ALTER TABLE coffee_brews ADD COLUMN pressure REAL`);
     console.log(' Migrated: Added pressure column');
+  } catch (e) {
+    // Ignore
+  }
+
+  try {
+    await db.exec(`ALTER TABLE coffee_brews ADD COLUMN bean_id TEXT`);
+    console.log(' Migrated: Added bean_id column');
   } catch (e) {
     // Ignore
   }

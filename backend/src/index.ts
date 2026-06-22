@@ -16,7 +16,7 @@ app.post('/api/logs', (req, res) => {
   res.sendStatus(200);
 });
 
-// 1. Create a new brew record
+// 1. Create a new brew record (with optional inventory deduction and telemetry data points)
 app.post('/api/brews', async (req, res) => {
   try {
     const { 
@@ -32,41 +32,93 @@ app.post('/api/brews', async (req, res) => {
       brew_type,
       liquid_weight,
       preinfusion_time,
-      pressure
+      pressure,
+      bean_id,
+      telemetry // array of { time: number, yield: number, flow: number, pressure: number }
     } = req.body;
 
-    if (!bean_name) {
-      return res.status(400).json({ error: 'Bean name is required' });
-    }
+    let finalBeanName = bean_name;
+    let finalBeanId = bean_id || null;
 
     const id = randomUUID();
     const timestamp = created_at ? new Date(created_at).toISOString() : new Date().toISOString();
     const typeOfBrew = brew_type || 'pour_over';
 
-    await db.run(
-      `INSERT INTO coffee_brews (
-        id, bean_name, grind_size, water_temp, coffee_weight, water_weight, 
-        brew_time, rating, notes, created_at, brew_type, liquid_weight, 
-        preinfusion_time, pressure
-      )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        id,
-        bean_name,
-        grind_size || null,
-        water_temp !== undefined ? parseFloat(water_temp) : null,
-        coffee_weight !== undefined ? parseFloat(coffee_weight) : null,
-        water_weight !== undefined ? parseFloat(water_weight) : null,
-        brew_time !== undefined ? parseInt(brew_time) : null,
-        rating !== undefined ? parseInt(rating) : null,
-        notes || null,
-        timestamp,
-        typeOfBrew,
-        liquid_weight !== undefined ? parseFloat(liquid_weight) : null,
-        preinfusion_time !== undefined ? parseInt(preinfusion_time) : null,
-        pressure !== undefined ? parseFloat(pressure) : null
-      ]
-    );
+    // Begin database transaction for atomic brew + telemetry write
+    await db.run('BEGIN TRANSACTION');
+
+    try {
+      // If bean_id is provided, look up the bean in the inventory and deduct stock
+      if (finalBeanId) {
+        const beanRecord = await db.get('SELECT * FROM coffee_beans WHERE id = ?', [finalBeanId]);
+        if (beanRecord) {
+          finalBeanName = beanRecord.name;
+          
+          // Deduct dry coffee weight from stock if coffee_weight is provided
+          if (coffee_weight !== undefined && coffee_weight !== null) {
+            const usedWeight = parseFloat(coffee_weight);
+            if (!isNaN(usedWeight)) {
+              const newWeight = Math.max(0, (beanRecord.current_weight || 0) - usedWeight);
+              await db.run('UPDATE coffee_beans SET current_weight = ? WHERE id = ?', [newWeight, finalBeanId]);
+            }
+          }
+        }
+      }
+
+      if (!finalBeanName) {
+        await db.run('ROLLBACK');
+        return res.status(400).json({ error: 'Bean name or Bean ID is required' });
+      }
+
+      await db.run(
+        `INSERT INTO coffee_brews (
+          id, bean_name, grind_size, water_temp, coffee_weight, water_weight, 
+          brew_time, rating, notes, created_at, brew_type, liquid_weight, 
+          preinfusion_time, pressure, bean_id
+        )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          finalBeanName,
+          grind_size || null,
+          water_temp !== undefined ? parseFloat(water_temp) : null,
+          coffee_weight !== undefined ? parseFloat(coffee_weight) : null,
+          water_weight !== undefined ? parseFloat(water_weight) : null,
+          brew_time !== undefined ? parseInt(brew_time) : null,
+          rating !== undefined ? parseInt(rating) : null,
+          notes || null,
+          timestamp,
+          typeOfBrew,
+          liquid_weight !== undefined ? parseFloat(liquid_weight) : null,
+          preinfusion_time !== undefined ? parseInt(preinfusion_time) : null,
+          pressure !== undefined ? parseFloat(pressure) : null,
+          finalBeanId
+        ]
+      );
+
+      // Insert telemetry data points if present
+      if (telemetry && Array.isArray(telemetry) && telemetry.length > 0) {
+        const stmt = await db.prepare(
+          `INSERT INTO brew_telemetry_points (brew_id, time_offset, yield, flow_rate, pressure)
+           VALUES (?, ?, ?, ?, ?)`
+        );
+        for (const pt of telemetry) {
+          await stmt.run([
+            id,
+            pt.time !== undefined ? parseFloat(pt.time) : 0,
+            pt.yield !== undefined ? parseFloat(pt.yield) : null,
+            pt.flow !== undefined ? parseFloat(pt.flow) : null,
+            pt.pressure !== undefined ? parseFloat(pt.pressure) : null
+          ]);
+        }
+        await stmt.finalize();
+      }
+
+      await db.run('COMMIT');
+    } catch (err) {
+      await db.run('ROLLBACK');
+      throw err;
+    }
 
     const newBrew = await db.get('SELECT * FROM coffee_brews WHERE id = ?', [id]);
     res.status(201).json({ success: true, data: newBrew });
@@ -216,6 +268,197 @@ app.get('/api/brews/stats', async (req, res) => {
     });
   } catch (error) {
     console.error('Error generating stats:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 5. Register a new bag of coffee beans in inventory
+app.post('/api/inventory/beans', async (req, res) => {
+  try {
+    const { name, roaster, roast_date, roast_level, origin, process, initial_weight } = req.body;
+    if (!name || !roast_date) {
+      return res.status(400).json({ error: 'Name and roast date are required' });
+    }
+    const id = randomUUID();
+    const initial = initial_weight !== undefined ? parseFloat(initial_weight) : null;
+    
+    await db.run(
+      `INSERT INTO coffee_beans (id, name, roaster, roast_date, roast_level, origin, process, initial_weight, current_weight)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, name, roaster || null, roast_date, roast_level || null, origin || null, process || null, initial, initial]
+    );
+    const newBean = await db.get('SELECT * FROM coffee_beans WHERE id = ?', [id]);
+    res.status(201).json({ success: true, data: newBean });
+  } catch (error) {
+    console.error('Error creating bean inventory:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 6. Retrieve active coffee beans list with roast aging alerts
+app.get('/api/inventory/beans/active', async (req, res) => {
+  try {
+    const beans = await db.all('SELECT * FROM coffee_beans WHERE is_active = 1 ORDER BY roast_date DESC');
+    
+    const updatedBeans = beans.map(bean => {
+      const roastDate = new Date(bean.roast_date);
+      const today = new Date();
+      const diffTime = Math.abs(today.getTime() - roastDate.getTime());
+      const daysSinceRoast = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      let peak_status = '熟成中 (Resting)';
+      const level = bean.roast_level || 'medium';
+      
+      if (level === 'light') {
+        if (daysSinceRoast >= 14 && daysSinceRoast <= 45) peak_status = '黃金賞味期 (Peak)';
+        else if (daysSinceRoast > 45) peak_status = '已過熟成期 (Post-Peak)';
+      } else if (level === 'medium') {
+        if (daysSinceRoast >= 7 && daysSinceRoast <= 30) peak_status = '黃金賞味期 (Peak)';
+        else if (daysSinceRoast > 30) peak_status = '已過熟成期 (Post-Peak)';
+      } else { // dark
+        if (daysSinceRoast >= 4 && daysSinceRoast <= 21) peak_status = '黃金賞味期 (Peak)';
+        else if (daysSinceRoast > 21) peak_status = '已過熟成期 (Post-Peak)';
+      }
+      
+      return {
+        ...bean,
+        days_since_roast: daysSinceRoast,
+        peak_status
+      };
+    });
+    
+    res.json({ success: true, data: updatedBeans });
+  } catch (error) {
+    console.error('Error fetching active bean inventory:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 6.2 Update a coffee bean in inventory
+app.put('/api/inventory/beans/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, roaster, roast_date, roast_level, origin, process, current_weight, is_active } = req.body;
+    
+    const bean = await db.get('SELECT * FROM coffee_beans WHERE id = ?', [id]);
+    if (!bean) {
+      return res.status(404).json({ error: 'Coffee bean record not found' });
+    }
+    
+    await db.run(
+      `UPDATE coffee_beans SET 
+        name = ?, 
+        roaster = ?, 
+        roast_date = ?, 
+        roast_level = ?, 
+        origin = ?, 
+        process = ?, 
+        current_weight = ?,
+        is_active = ?
+       WHERE id = ?`,
+      [
+        name !== undefined ? name : bean.name,
+        roaster !== undefined ? roaster : bean.roaster,
+        roast_date !== undefined ? roast_date : bean.roast_date,
+        roast_level !== undefined ? roast_level : bean.roast_level,
+        origin !== undefined ? origin : bean.origin,
+        process !== undefined ? process : bean.process,
+        current_weight !== undefined && current_weight !== "" ? parseFloat(current_weight) : bean.current_weight,
+        is_active !== undefined ? (is_active ? 1 : 0) : bean.is_active,
+        id
+      ]
+    );
+    
+    const updatedBean = await db.get('SELECT * FROM coffee_beans WHERE id = ?', [id]);
+    res.json({ success: true, data: updatedBean });
+  } catch (error) {
+    console.error('Error updating coffee bean:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 7. Update a brew record (notes/rating/parameters)
+app.put('/api/brews/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { 
+      notes, 
+      rating,
+      grind_size,
+      water_temp,
+      coffee_weight,
+      water_weight,
+      brew_time,
+      liquid_weight,
+      preinfusion_time,
+      pressure
+    } = req.body;
+    
+    const brew = await db.get('SELECT * FROM coffee_brews WHERE id = ?', [id]);
+    if (!brew) {
+      return res.status(404).json({ error: 'Brew record not found' });
+    }
+    
+    await db.run(
+      `UPDATE coffee_brews SET 
+        notes = ?, 
+        rating = ?, 
+        grind_size = ?, 
+        water_temp = ?, 
+        coffee_weight = ?, 
+        water_weight = ?, 
+        brew_time = ?, 
+        liquid_weight = ?, 
+        preinfusion_time = ?, 
+        pressure = ?
+       WHERE id = ?`,
+      [
+        notes !== undefined ? notes : brew.notes, 
+        rating !== undefined ? parseInt(rating) : brew.rating, 
+        grind_size !== undefined ? grind_size : brew.grind_size,
+        water_temp !== undefined && water_temp !== "" ? parseFloat(water_temp) : brew.water_temp,
+        coffee_weight !== undefined && coffee_weight !== "" ? parseFloat(coffee_weight) : brew.coffee_weight,
+        water_weight !== undefined && water_weight !== "" ? parseFloat(water_weight) : brew.water_weight,
+        brew_time !== undefined && brew_time !== "" ? parseInt(brew_time) : brew.brew_time,
+        liquid_weight !== undefined && liquid_weight !== "" ? parseFloat(liquid_weight) : brew.liquid_weight,
+        preinfusion_time !== undefined && preinfusion_time !== "" ? parseInt(preinfusion_time) : brew.preinfusion_time,
+        pressure !== undefined && pressure !== "" ? parseFloat(pressure) : brew.pressure,
+        id
+      ]
+    );
+    
+    const updatedBrew = await db.get('SELECT * FROM coffee_brews WHERE id = ?', [id]);
+    res.json({ success: true, data: updatedBrew });
+  } catch (error) {
+    console.error('Error updating brew:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 8. Get details of a single brew along with its telemetry points
+app.get('/api/brews/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const brew = await db.get('SELECT * FROM coffee_brews WHERE id = ?', [id]);
+    
+    if (!brew) {
+      return res.status(404).json({ error: 'Brew record not found' });
+    }
+
+    const telemetry = await db.all(
+      'SELECT time_offset as time, yield, flow_rate as flow, pressure FROM brew_telemetry_points WHERE brew_id = ? ORDER BY time_offset ASC',
+      [id]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        ...brew,
+        telemetry
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching single brew details:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -42,4 +42,23 @@ export interface StatsResponse {
   daily: ChartDataPoint[];
   weekly: ChartDataPoint[];
   monthly: ChartDataPoint[];
+}export interface CoffeeBean {
+  id: string;
+  name: string;
+  roaster?: string;
+  roast_date: string;
+  roast_level?: "light" | "medium" | "dark";
+  origin?: string;
+  process?: string;
+  initial_weight?: number;
+  current_weight?: number;
+  days_since_roast?: number;
+  peak_status?: string;
+}
+
+export interface TelemetryPoint {
+  time: number;
+  yield: number;
+  flow: number;
+  pressure?: number;
 }
